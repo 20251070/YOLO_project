@@ -1,0 +1,8 @@
+# 용량이 큰 이미지 및 라벨 데이터는 Git 추적에서 제외
+data/train/
+data/valid/
+data/test/
+
+# 설정 파일 및 샘플 영상은 Git 추적 허용
+!data/data.yaml
+!data/sample_video.mp4

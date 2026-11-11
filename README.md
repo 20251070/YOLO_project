@@ -1,6 +1,6 @@
 스마트 보행 안전 프로그램 
 
-
+자료 링크 : 추가 데이터셋 링크 : https://universe.roboflow.com/project/pedestrian-crosswalk-detection/dataset/2
 -- 1week 진행상황 -- 
 야간 보행 데이터셋 확보, 모델 기초 생성 
 

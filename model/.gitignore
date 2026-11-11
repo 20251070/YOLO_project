@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+runs/
+*.pt
+config/*.json
+# 원본 영상과 라벨을 작성한 이미지는 기본적으로 Git에서 제외하고 팀 드라이브로 공유합니다.
+data/raw/
+data/pedestrian/images/
+data/pedestrian/labels/

@@ -1,0 +1,18 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "횡단보도 영상 실행",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/demo_camera.py",
+            "python": "C:\\Users\\tele1\\anaconda3-3\\envs\\yolo_project\\python.exe",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "args": [
+                "--source",
+                "data/raw/crosswalk.mp4"
+            ]
+        }
+    ]
+}

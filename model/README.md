@@ -83,53 +83,79 @@ python run_demo.py --source 0 --model runs/weather_person_v1/weights/best.pt
 
 `dataset_smoke`는 학습 연결을 확인하기 위한 모델이며 성능 검증을 마친 최종 모델이 아닙니다.
 
-## 5. 카메라 실행
+## 5. 영상 및 카메라 실행
 
-현재 제공된 영상은 data/raw/crosswalk.mp4에 있습니다. Windows에서는 프로젝트 폴더에서 다음 명령을 실행하면 SSL과 필수 패키지가 정상인 파이썬 환경을 찾아 실행합니다.
+모든 명령은 `model` 폴더에서 실행합니다. 기본 모델은 `yolo11n.pt`입니다.
 
 ```powershell
-python run_demo.py
+# 저장 영상
+python run_demo.py --source data/raw/crosswalk.mp4 --model yolo11n.pt
+# 내장 카메라
+python run_demo.py --source 0 --model yolo11n.pt
+# USB 웹캠 (장치에 따라 0, 1, 2 등으로 변경)
+python run_demo.py --source 1 --model yolo11n.pt
+# 추가 학습 모델
+python run_demo.py --source 1 --model runs/weather_person_v1-2/weights/best.pt
 ```
 
-VS Code에서는 실행 및 디버그에서 **횡단보도 영상 실행**을 선택할 수 있습니다. 기본 모델은 프로젝트 폴더의 yolo11n.pt를 읽습니다. 모델을 처음 내려받을 때 SSL 모듈 관련 오류가 발생하면 파이썬 환경 문제이므로 SSL이 정상인 환경으로 실행하세요.
+**실행할 때마다 현재 첫 프레임에서 횡단보도를 자동 탐색합니다.**
+기존 ROI 파일이 있어도 새로 탐색하며, 성공하면 같은 파일을 갱신합니다.
+자동 탐색은 주변 도로와의 명암 차이 및 반복되는 평행 도색 띠를 이용한 OpenCV 추정입니다. 화면 전체를 탐색하며 횡단보도 전용 학습 모델은 아닙니다.
+실패하면 오래된 저장 영역을 불러오지 않고 전체 화면의 보행자 감지를 계속합니다.
 
+- **a**: 현재 화면에서 자동 탐색만 다시 실행합니다. 영상과 모델을 다시 불러오지 않습니다.
+- **z**: 경계에 점을 찍어 **다각형 영역**을 직접 지정합니다. 대각선은 모서리를, 굴곡은 점을 촘촘히 찍어 둘러쌉니다.
+  왼쪽 클릭으로 점 추가, Enter/Space로 확정, 오른쪽 클릭/Backspace로 마지막 점 취소,
+  X로 다시 그리기, C/Esc로 취소합니다. 취소하면 현재 영역을 유지합니다.
+  선이 서로 교차하거나 영역 넓이가 0이면 확정하지 않고 수정할 수 있게 안내합니다.
+  오목한 다각형도 지원하며, 보행자 발 위치가 실제 다각형 안에 있는지 판단합니다.
+  새 다각형은 같은 ROI 파일의 roi 항목에 정규화된 [[x,y], ...] 좌표로 저장합니다.
+  기존 [x,y,너비,높이] 사각형 형식과 자동 탐색 결과도 계속 지원합니다.
+- a 재탐색에 실패하면 현재 사용 중인 영역과 저장 파일을 유지합니다.
+- 영역을 성공적으로 갱신하면 분석을 재개하고 새 영역으로 횡단 여부를 판단합니다.
+- **p**: 분석 일시 정지/재개, **q** 또는 창 닫기: 종료
+- **g / r / u**: 보행자 신호를 녹색 / 적색 / 알 수 없음으로 수동 설정
 
-영상의 상대 경로는 현재 실행 폴더, 프로젝트 폴더, data/raw 폴더, scripts 폴더 순서로 찾습니다. 파일이 없으면 확인한 경로를 오류 메시지로 보여 줍니다. `data/raw/crosswalk.mp4`는 프로젝트 폴더에서 다음 명령으로 실행할 수 있습니다.
-
-```powershell
-python scripts/demo_camera.py --source data/raw/crosswalk.mp4
-```
-
-
-```powershell
-# 노트북 내장 카메라
-python scripts/demo_camera.py --source 0 --model runs/weather_person_v1/weights/best.pt
-# USB 카메라는 장치 번호가 1일 수 있습니다.
-python scripts/demo_camera.py --source 1 --model runs/weather_person_v1/weights/best.pt --roi-file config/usb_roi.json
-# 동영상 파일
-python scripts/demo_camera.py --source data/raw/day/day01.mp4 --model runs/weather_person_v1/weights/best.pt --roi-file config/video_roi.json
-# RTSP 카메라(접근 권한이 있는 실제 주소를 사용하세요).
-python scripts/demo_camera.py --source "rtsp://USERNAME:PASSWORD@HOST:554/stream" --model runs/weather_person_v1/weights/best.pt --roi-file config/ip_roi.json
-```
-
-시작할 때 횡단보도를 사각형으로 지정하고 Enter 키로 확정합니다. 관심 영역은 --roi-file로 지정한 파일에 정규화된 좌표로 저장됩니다. **z** 키로 다시 지정할 수 있습니다. 카메라나 촬영 각도가 다르면 **서로 다른 관심 영역 파일을 사용**합니다. 미리보기는 크기를 조절하지만 감지는 원본 프레임에서 수행합니다. --output recorded.mp4를 지정하면 표시 화면을 원래 해상도로 저장할 수 있습니다. **RTSP 접속 정보나 촬영 영상을 GitHub에 올리지 마세요.**
-
-
-### 노트북 내장 카메라 연결
-
-Windows 카메라 앱과 화상회의 앱을 종료한 뒤 프로젝트 폴더에서 실행합니다.
+기본 ROI 저장 위치는 카메라 `0`이면 `config/camera_0_roi.json`, 카메라 `1`이면 `config/camera_1_roi.json`,
+영상 파일이면 `config/crosswalk_roi.json`, IP 스트림이면 `config/ip_roi.json`입니다.
+첫 저장 이후에는 이 파일을 계속 덮어씁니다. 매 실행 또는 a 입력마다 새로운 파일을 만들지 않습니다.
+다른 고정 경로를 사용하려면 `--roi-file config/my_camera_roi.json`을 지정하세요.
+상대 ROI 경로는 현재 터미널 위치와 관계없이 `model` 폴더 기준으로 해석합니다.
 
 ```powershell
-python run_demo.py --source 0 --roi-file config/webcam_roi.json
-```
-
-Windows에서는 DirectShow, Media Foundation, 기본 연결 방식을 순서대로 시도합니다. 연결 확인만 하려면 다음 명령을 사용합니다.
-
-```powershell
+# 같은 ROI 파일을 계속 갱신
+python run_demo.py --source 1 --model yolo11n.pt --roi-file config/my_camera_roi.json
+# 카메라 연결 확인만 수행 (자동 탐색 및 모델 분석은 하지 않음)
 python run_demo.py --source 0 --check-camera
+# Windows 카메라 연결 방식 지정
+python run_demo.py --source 0 --camera-backend dshow
+# 필요할 때만 분석 화면을 영상으로 저장
+python run_demo.py --source data/raw/crosswalk.mp4 --output recorded.mp4
 ```
 
-특정 연결 방식은 --camera-backend dshow 또는 --camera-backend msmf로 지정합니다. 일반 카메라와 적외선 카메라의 장치 번호가 다르면 --source 1도 확인합니다. 카메라 앱은 정상인데 파이썬만 실패할 경우 Windows의 카메라 설정에서 데스크톱 앱의 카메라 접근 허용 여부를 확인합니다.
+영상 파일은 가능한 경우 하드웨어 디코딩을 사용하며, 지원하지 않으면 기본 디코더로 복귀합니다.
+고해상도 영상의 기본 재생은 원본 시간에 맞춰 중간 프레임을 건너뜁니다.
+원본 60 FPS 영상의 모든 프레임을 모델로 분석한다는 의미는 아닙니다. 실제 분석 FPS는 CPU/GPU에 따라 달라집니다.
+기본 분석·그리기 크기는 가장 긴 변 1280픽셀로 제한하고 영상 비율과 정규화 ROI 좌표는 유지합니다.
+`--max-frame-size 0`으로 원본 처리 크기를 유지할 수 있으나 느려질 수 있습니다.
+저장 영상에서 모든 프레임을 분석하려면 `--video-mode all`을 사용하세요.
+`--output`이 있으면 기본적으로 전체 프레임 처리로 전환하여 저장 영상의 시간축을 유지합니다.
+명시적으로 `--video-mode realtime --output ...`을 함께 쓰면 분석된 프레임만 저장하므로 재생 시간이 짧아질 수 있습니다.
+저장되는 영상의 해상도도 처리 크기를 따릅니다.
+
+```powershell
+# 4K/60 FPS 영상: 시간에 맞춰 프레임 선택 + 처리 크기 제한
+python run_demo.py --source data/raw/crosswalk2.mp4 --model yolo11n.pt
+
+# 원본 크기로 모든 프레임 분석 (빠른 재생보다 분석 보존이 필요한 경우)
+python run_demo.py --source data/raw/crosswalk2.mp4 --model yolo11n.pt --video-mode all --max-frame-size 0
+```
+
+카메라 수신은 별도 스레드에서 계속 처리하며 최신 프레임을 분석합니다.
+첫 프레임에 횡단보도가 없으면 카메라를 맞춘 뒤 a를 눌러 다시 찾을 수 있습니다.
+카메라 위치가 바뀌었을 때도 a 또는 z를 사용하세요.
+`--output`을 지정했을 때만 영상으로 저장하며, 기존 영상 경로 탐색과 한글 글꼴 지원은 동일합니다.
+RTSP 접속 정보와 촬영 영상을 GitHub에 올리지 마세요.
 
 ## 6. 권장 시험 사례
 

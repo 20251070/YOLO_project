@@ -41,7 +41,12 @@ def open_video_capture(source, camera_backend='auto'):
     automatic = [('자동', cv2.CAP_ANY)]
     if os.name == 'nt':
         automatic = backends['dshow'] + backends['msmf'] + automatic
-    attempts = backends.get(camera_backend, automatic) if is_camera else [('영상 입력', cv2.CAP_ANY)]
+    if is_camera:
+        attempts = backends.get(camera_backend, automatic)
+    elif '://' not in str(source) and hasattr(cv2, 'CAP_PROP_HW_ACCELERATION'):
+        attempts = [('하드웨어 영상 디코딩', cv2.CAP_FFMPEG), ('영상 입력', cv2.CAP_ANY)]
+    else:
+        attempts = [('영상 입력', cv2.CAP_ANY)]
     failures = []
     for name, api in attempts:
         cap = None
@@ -49,7 +54,12 @@ def open_video_capture(source, camera_backend='auto'):
         if is_camera:
             print(f'카메라 {source} 연결 시도: {name}', flush=True)
         try:
-            cap = cv2.VideoCapture(source, api) if is_camera else cv2.VideoCapture(source)
+            if not is_camera and api == cv2.CAP_FFMPEG:
+                cap = cv2.VideoCapture(source, api, [
+                    cv2.CAP_PROP_HW_ACCELERATION, cv2.VIDEO_ACCELERATION_ANY,
+                ])
+            else:
+                cap = cv2.VideoCapture(source, api) if is_camera else cv2.VideoCapture(source)
             if not cap.isOpened():
                 failures.append(f'{name}: 장치를 열지 못했습니다.')
                 continue
@@ -61,6 +71,8 @@ def open_video_capture(source, camera_backend='auto'):
                     success = True
                     if is_camera:
                         print(f'카메라 {source} 연결 완료: {name}', flush=True)
+                    elif api == cv2.CAP_FFMPEG and cap.get(cv2.CAP_PROP_HW_ACCELERATION):
+                        print('영상 하드웨어 디코딩 사용', flush=True)
                     return cap, frame
                 if not is_camera or time.monotonic() >= deadline:
                     failures.append(f'{name}: 화면을 읽지 못했습니다.')
@@ -145,3 +157,56 @@ class LatestFrameCapture:
         # read가 멈춰도 UI 종료를 오래 막지 않습니다. 실제 release는
         # read가 반환된 뒤 캡처 스레드에서 수행합니다.
         self._thread.join(timeout=1.0)
+
+
+class VideoPlayback:
+    """미디어 시간에 맞춰 프레임을 고르고 대기 중에는 UI로 제어를 돌려줍니다.
+
+    open_video_capture에서 첫 프레임을 이미 읽었으므로 다음 인덱스는 1입니다.
+    첫 화면을 표시한 뒤 start()를 호출해 모델 준비 시간을 재생 시간에서 뺍니다.
+    """
+
+    def __init__(self, capture, fps, clock=None):
+        self.capture = capture
+        self.fps = float(fps)
+        if not 0 < self.fps < float('inf'):
+            raise ValueError('영상 FPS는 0보다 큰 유한한 값이어야 합니다.')
+        self.clock = clock or time.monotonic
+        self.started_at = None
+        self.paused_at = None
+        self.next_index = 1
+        self.max_grabs = max(1, round(self.fps / 3))
+
+    def start(self):
+        if self.started_at is None:
+            self.started_at = self.clock()
+
+    def pause(self):
+        if self.started_at is not None and self.paused_at is None:
+            self.paused_at = self.clock()
+
+    def resume(self):
+        if self.paused_at is not None:
+            self.started_at += self.clock() - self.paused_at
+            self.paused_at = None
+
+    def read(self):
+        """(정상, 프레임)을 반환합니다. 프레임 None은 이벤트 처리 후 재호출할 대기 상태입니다."""
+        self.start()
+        if self.paused_at is not None:
+            return True, None
+        target = int(max(0., self.clock() - self.started_at) * self.fps)
+        if target < self.next_index:
+            return True, None
+        skip = min(target - self.next_index, self.max_grabs)
+        for _ in range(skip):
+            if not self.capture.grab():
+                return False, None
+            self.next_index += 1
+        if self.next_index < target:
+            return True, None
+        ok, frame = self.capture.read()
+        if not ok or frame is None or not frame.size:
+            return False, None
+        self.next_index += 1
+        return True, frame
